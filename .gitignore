@@ -1,0 +1,36 @@
+# Project spec (kept locally, not tracked)
+Forge.pdf
+
+# Dependencies
+node_modules/
+.pnp
+.pnp.*
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+.vite/
+
+# Uploaded media (challenge covers, check-in proofs)
+uploads/
+
+# Logs & coverage
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+coverage/
+
+# OS & editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
