@@ -1,0 +1,36 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: forge-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-forge}
+      POSTGRES_USER: ${DB_USER:-forge}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-forge_dev_password}
+    ports:
+      - '${DB_PORT:-5432}:5432'
+    volumes:
+      - forge_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${DB_USER:-forge} -d ${DB_NAME:-forge}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Optional cache layer. Off by default; start with:
+  #   docker compose --profile cache up -d
+  cache:
+    image: redis:7-alpine
+    container_name: forge-cache
+    restart: unless-stopped
+    profiles: [cache]
+    ports:
+      - '${REDIS_PORT:-6379}:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  forge_pgdata:
