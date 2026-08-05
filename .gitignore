@@ -1,5 +1,6 @@
-# Project spec (kept locally, not tracked)
+# Local-only docs (kept locally, not tracked)
 Forge.pdf
+CLAUDE.md
 
 # Dependencies
 node_modules/
