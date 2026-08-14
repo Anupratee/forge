@@ -1,0 +1,8 @@
+{
+  /* Compilation config. Identical to tsconfig.json except that tests are left out of `dist`.
+
+     `npm run typecheck` deliberately uses tsconfig.json instead, so the tests are still type-checked —
+     Vitest transpiles without checking types, so this is the only thing that reads them. */
+  "extends": "./tsconfig.json",
+  "exclude": ["node_modules", "dist", "src/**/*.test.ts"]
+}
