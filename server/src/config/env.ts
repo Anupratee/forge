@@ -86,6 +86,24 @@ function jwtSecret(): string {
   return value;
 }
 
+/**
+ * A `jsonwebtoken` lifetime: bare seconds, or a number with a unit such as `7d` or `12h`.
+ *
+ * Validated here so a typo fails at boot rather than on the first login attempt. The library types
+ * this option as a template-literal union of duration strings, which a value read from the
+ * environment cannot satisfy at compile time — so `utils/jwt.ts` casts to it, and this check is what
+ * makes that cast honest.
+ */
+function jwtExpiresIn(): string {
+  const value = optionalString('JWT_EXPIRES_IN', '7d');
+  if (!/^\d+(ms|s|m|h|d|w|y)?$/.test(value)) {
+    problems.push(
+      `JWT_EXPIRES_IN must be seconds or a duration like "7d" or "12h" (got "${value}")`,
+    );
+  }
+  return value;
+}
+
 const parsed = {
   nodeEnv: nodeEnv(),
   port: requiredPort('PORT', 3000),
@@ -101,7 +119,7 @@ const parsed = {
 
   jwt: {
     secret: jwtSecret(),
-    expiresIn: optionalString('JWT_EXPIRES_IN', '7d'),
+    expiresIn: jwtExpiresIn(),
   },
 
   uploads: {
