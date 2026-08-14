@@ -13,7 +13,13 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write \"src/**/*.ts\"",
-    "test": "vitest run"
+    "test": "vitest run",
+    "typeorm": "tsx ./node_modules/typeorm/cli.js -d src/config/data-source.ts",
+    "schema:log": "npm run typeorm -- schema:log",
+    "migration:generate": "npm run typeorm -- migration:generate",
+    "migration:run": "npm run typeorm -- migration:run",
+    "migration:revert": "npm run typeorm -- migration:revert",
+    "migration:show": "npm run typeorm -- migration:show"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",
