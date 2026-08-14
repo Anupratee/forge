@@ -180,3 +180,51 @@ about:
 
 Also verified: all nine commits for this phase type-check independently, and the compiled `dist/`
 output serves login correctly — not just the TypeScript dev runner.
+
+### Phase 4 — Core entity: challenges and the approval workflow
+
+**What I asked for:** build the core entity — Creator authoring, the Admin approval workflow, the
+User browse with the graded search filters, joining with capacity limits, and daily check-ins.
+
+**What the assistant did:** fourteen endpoints under `/api/challenges`, a `ChallengeStateMachine`
+holding every legal status change, a `PointsService` that is the only writer to the ledger, the
+shared `ListQueryDto` and pagination envelope, and Multer-based image upload.
+
+**Design decisions worth recording:**
+
+1. **Every status change goes through one file.** `ChallengeStateMachine.ts` holds the transition map.
+   Self-approval is prevented by a single line — `PENDING_APPROVAL → APPROVED` lists `ADMIN` and
+   nothing else — rather than by a check repeated at each endpoint.
+2. **Capacity is enforced under a row lock.** Counting participants and then inserting is a race: two
+   simultaneous joins on the last seat both read `capacity - 1` and both succeed. The transaction
+   locks the challenge row first.
+3. **A check-in and its points are one transaction.** The unique key on
+   `(participation_id, check_in_date)` means a check-in that committed without its award could never
+   be retried, leaving that day permanently unpaid. `PointsService.award` *requires* an
+   `EntityManager`, so it cannot be called outside a transaction by accident.
+4. **Completion is defined as perfect attendance** — one check-in per day of the window — so it can be
+   decided the moment the last check-in lands, with no scheduled job.
+5. **Search is safe by construction.** `sortBy` is an allow-list mapped to a column, so no query-string
+   value reaches an `ORDER BY`. Keyword wildcards are escaped, so searching for `%` does not match
+   everything. Every list has a deterministic tiebreak, without which rows sharing a sort value can
+   appear twice or never across pages.
+6. **Uploaded filenames are generated, never derived from the upload**, and the MIME type must agree
+   with the extension.
+7. **Material edits re-enter approval.** Re-sending an unchanged value does not, because the service
+   compares submitted values against current ones.
+
+**What I verified:** a 57-check script against a running server, all passing. It walks the full
+lifecycle — draft → invisible to Users → submit → self-approval refused → rejected with a reason →
+edit → resubmit → approve → visible → join → check in — and then covers:
+
+| Area | Checks that passed |
+| --- | --- |
+| Approval workflow | Creator cannot self-approve (403); a challenge under review cannot be edited; a draft is 404 to a User, not 403; resubmission clears the old rejection reason |
+| Capacity | the second user for a one-seat challenge gets 409; `availableOnly=true` hides it |
+| Economy | check-in pays 15; three check-ins on a three-day challenge pay 15 + 15 + (15 + 500) = 545 and flip the participation to COMPLETED; a second check-in for the same day is 409 |
+| RBAC scoping | **another Creator cannot read participants (403)**, and neither can an Admin; a User cannot author a challenge or read the Creator list; a Creator cannot read the Admin queue or edit another Creator's challenge |
+| Search and filter | category, keyword, lowercase `sortDir`, page boundaries, date-range overlap, `availableOnly`; an unknown `sortBy` is 400; `?status=DRAFT` on the public browse is 400; a bare `%` matches nothing |
+| Validation | a non-UUID id is 400 rather than a 500 from PostgreSQL; `endDate` before `startDate` is 400; a client-supplied `status` is 400; capacity cannot be cut below the people already joined (409) |
+| Uploads | a real multipart create stores a generated filename and serves the exact bytes back; a shell script declared as `x-sh` is refused; a genuine PNG named `.txt` is refused; `../../../../pwned.png` is stored safely inside `covers/` |
+
+All ten commits for this phase also type-check independently.
