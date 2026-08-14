@@ -3,7 +3,7 @@ import { authController } from '../controllers/AuthController';
 import { LoginDto } from '../dtos/LoginDto';
 import { RegisterDto } from '../dtos/RegisterDto';
 import { authenticate } from '../middlewares/auth.middleware';
-import { validate } from '../middlewares/validate.middleware';
+import { validateBody } from '../middlewares/validate.middleware';
 
 /**
  * Authentication routes.
@@ -14,6 +14,6 @@ import { validate } from '../middlewares/validate.middleware';
  */
 export const authRoutes = Router();
 
-authRoutes.post('/register', validate(RegisterDto), authController.register);
-authRoutes.post('/login', validate(LoginDto), authController.login);
+authRoutes.post('/register', validateBody(RegisterDto), authController.register);
+authRoutes.post('/login', validateBody(LoginDto), authController.login);
 authRoutes.get('/me', authenticate, authController.me);

@@ -3,11 +3,9 @@ import type { RegisterDto } from '../dtos/RegisterDto';
 import type { LoginDto } from '../dtos/LoginDto';
 import { Role } from '../entities/User';
 import { getAuth } from '../middlewares/auth.middleware';
+import type { BodyOf } from '../middlewares/validate.middleware';
 import type { AuthService } from '../services/AuthService';
 import { authService } from '../services/AuthService';
-
-/** A request whose body has already been validated into `T` by the `validate` middleware. */
-type Body<T> = Request<Record<string, string>, unknown, T>;
 
 /**
  * Translates HTTP to `AuthService` calls and back.
@@ -21,7 +19,7 @@ type Body<T> = Request<Record<string, string>, unknown, T>;
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
-  register = async (req: Body<RegisterDto>, res: Response): Promise<void> => {
+  register = async (req: BodyOf<RegisterDto>, res: Response): Promise<void> => {
     const result = await this.authService.register({
       email: req.body.email,
       password: req.body.password,
@@ -34,7 +32,7 @@ export class AuthController {
     res.status(201).json(result);
   };
 
-  login = async (req: Body<LoginDto>, res: Response): Promise<void> => {
+  login = async (req: BodyOf<LoginDto>, res: Response): Promise<void> => {
     const result = await this.authService.login({
       email: req.body.email,
       password: req.body.password,
