@@ -130,3 +130,53 @@ about:
 - `npm run seed` twice: row counts do not double, and the ledger sums to the balances I calculated
   by hand (70 and 50).
 - Lint and type-check pass, including the generated migration.
+
+### Phase 3 — Authentication and RBAC
+
+**What I asked for:** build authentication and role-based authorization.
+
+**What the assistant did:**
+
+- `POST /api/auth/register`, `POST /api/auth/login`, `GET /api/auth/me`, with bcrypt at cost 12 and
+  JWTs carrying `sub` and `role`.
+- `authenticate` and `authorize(...roles)` middleware, a central error handler, and one
+  `validate(Dto)` middleware over class-validator.
+- `GET /api/admin/summary` — the specification's system-wide statistics for the Admin dashboard, and
+  the Admin-gated route that makes `authorize` provable.
+
+**Security decisions worth recording**, since these are the parts most likely to be asked about:
+
+1. **Authorization is decided from the database, not from the token.** `authenticate` verifies the
+   signature and then re-reads the account's role and status. A JWT stays cryptographically valid
+   until it expires, so trusting its claims would leave a suspended account working and a demoted
+   Admin still administering for days. Demonstrated below.
+2. **Nobody can register as an Admin.** The DTO rejects the role, and `AuthService.register`'s
+   parameter type permits only `USER` or `CREATOR`, so the compiler refuses the call as well.
+3. **Login does not leak which emails are registered.** "No such account" and "wrong password"
+   return the same message, and when no account matches, the password is still compared against a
+   decoy hash so both paths cost the same time.
+4. **Suspension is reported only after the password is verified**, so a suspended account cannot be
+   identified without its credentials.
+5. **`passwordHash` carries `select: false`** and responses are built by naming fields explicitly,
+   so a sensitive column added later stays hidden by default rather than being exposed until someone
+   remembers to strip it.
+6. **Unknown properties in a request body are rejected by name**, so a client cannot smuggle an extra
+   field into an object a service later spreads.
+
+**What I verified** (against a running server, with the seeded accounts):
+
+| Check | Result |
+| --- | --- |
+| Register a new user; register the same email in different case | 201, then 409 |
+| Register with `role: "ADMIN"` | 400, `role must be USER or CREATOR` |
+| Register with an undeclared extra field | 400, names the offending field |
+| Login with a wrong password vs. an unknown email | 401 with the *same* message both times |
+| Login as the suspended account with the correct password | 401, suspended |
+| `GET /auth/me` with a valid token | 200, and no `passwordHash` in the response |
+| `GET /auth/me` with no token / garbage / a token signed with a different secret | 401 in all three cases |
+| `GET /admin/summary` as Admin / as a User / with no token | 200 / **403** / 401 |
+| An unmatched route | 404 in the same error envelope as every other failure |
+| **Suspend an account holding a valid token, then reuse that token** | **401 immediately**; reactivating restored access with the same token |
+
+Also verified: all nine commits for this phase type-check independently, and the compiled `dist/`
+output serves login correctly — not just the TypeScript dev runner.
