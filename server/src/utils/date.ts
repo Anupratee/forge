@@ -13,6 +13,15 @@
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
+/**
+ * Matches exactly a calendar date, `YYYY-MM-DD`.
+ *
+ * DTOs validate against this rather than `@IsDateString`, which also accepts a full timestamp with an
+ * offset. Every `date` column here is zoneless, so accepting `2026-08-15T23:00:00+05:30` would mean
+ * silently discarding information the caller thought they were sending.
+ */
+export const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
 /** Formats a `Date` as the `YYYY-MM-DD` string the schema stores. */
 export function toIsoDate(value: Date): string {
   return value.toISOString().slice(0, 10);
