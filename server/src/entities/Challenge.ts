@@ -88,7 +88,10 @@ export class Challenge extends AuditedEntity {
    * Ownership (Role Type A). `RESTRICT` because a Creator account is suspended rather than deleted;
    * losing the owner would leave a challenge nobody can administer.
    */
-  @ManyToOne(() => User, (user) => user.createdChallenges, { nullable: false, onDelete: 'RESTRICT' })
+  @ManyToOne(() => User, (user) => user.createdChallenges, {
+    nullable: false,
+    onDelete: 'RESTRICT',
+  })
   @JoinColumn({ name: 'created_by' })
   createdBy!: Relation<User>;
 
