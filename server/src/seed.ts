@@ -480,6 +480,39 @@ async function seedHabits(manager: EntityManager, users: SeededUsers): Promise<v
  */
 async function seedBudgets(manager: EntityManager, users: SeededUsers): Promise<void> {
   const periodMonth = startOfMonth(today());
+  // Last month, so the adherence claim has a closed period to act on — it is refused while a month is
+  // still running, and without this there would be nothing to demonstrate it against.
+  const lastMonth = startOfMonth(addDays(periodMonth, -1));
+
+  await manager.save(
+    manager.create(BudgetGoal, {
+      title: 'Last month: groceries only',
+      description: 'Closed period, kept within its limit — the adherence bonus is claimable.',
+      category: ExpenseCategory.FOOD,
+      periodMonth: lastMonth,
+      limitAmount: 6000,
+      userId: users.asha.id,
+    }),
+  );
+
+  await manager.save(
+    manager.create(Expense, [
+      {
+        title: 'Groceries, first half',
+        amount: 2600,
+        category: ExpenseCategory.FOOD,
+        spentOn: addDays(lastMonth, 4),
+        userId: users.asha.id,
+      },
+      {
+        title: 'Groceries, second half',
+        amount: 2100,
+        category: ExpenseCategory.FOOD,
+        spentOn: addDays(lastMonth, 19),
+        userId: users.asha.id,
+      },
+    ]),
+  );
 
   await manager.save(
     manager.create(BudgetGoal, {
