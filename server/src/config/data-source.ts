@@ -1,6 +1,9 @@
 import path from 'node:path';
 import { DataSource } from 'typeorm';
 import { SnakeNamingStrategy } from 'typeorm-naming-strategies';
+// Side-effect import: registers the `date` type parser before any connection is opened, so a calendar date
+// is a YYYY-MM-DD string in raw queries as well as in hydrated entities. See the module for why.
+import './pg-types';
 import { BudgetGoal } from '../entities/BudgetGoal';
 import { Challenge } from '../entities/Challenge';
 import { ChallengeCheckIn } from '../entities/ChallengeCheckIn';
