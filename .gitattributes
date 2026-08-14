@@ -1,0 +1,16 @@
+# Line endings are normalised to LF in the repository.
+#
+# Without this, Git relies on each developer's core.autocrlf setting. On Windows that rewrites files to
+# CRLF in the working tree, which makes `git status` report unmodified files as changed — noise that hides
+# real changes and invites committing a whole-file rewrite by accident.
+#
+# The repository already stores LF, so this makes the existing behaviour explicit rather than changing it.
+* text=auto eol=lf
+
+# Generated and binary files Git should not try to diff or normalise.
+package-lock.json  -diff linguist-generated
+*.pdf              binary
+*.png              binary
+*.jpg              binary
+*.webp             binary
+*.ico              binary
