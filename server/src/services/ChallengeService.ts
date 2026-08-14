@@ -13,6 +13,7 @@ import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '.
 import { daysBetween, today } from '../utils/date';
 import { toPage, toPageRequest } from '../utils/pagination';
 import type { Page } from '../utils/pagination';
+import { escapeLikePattern } from '../utils/sql';
 import { assertSystemTransition, assertTransition, MATERIAL_FIELDS } from './ChallengeStateMachine';
 
 /**
@@ -510,16 +511,6 @@ function assertWindow(startDate: string, endDate: string): void {
   if (daysBetween(startDate, endDate) < 1) {
     throw new ValidationError('endDate must be after startDate');
   }
-}
-
-/**
- * Escapes the wildcards in a keyword before it is wrapped in `%…%`.
- *
- * Without this, a search for `50%` matches everything, and `_` quietly matches any character. PostgreSQL's
- * default LIKE escape is the backslash, so no ESCAPE clause is needed.
- */
-function escapeLikePattern(keyword: string): string {
-  return keyword.replace(/[\\%_]/g, (character) => `\\${character}`);
 }
 
 function toSummary(challenge: Challenge, participantCount: number): ChallengeSummary {
