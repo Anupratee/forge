@@ -75,3 +75,58 @@ that later work must respect.
 
 **What I verified:** the container reports healthy, and lint plus type-check pass in both
 packages.
+
+### Phase 2 — Data layer
+
+**What I asked for:** build the data layer, but stop after the entity classes so I could review the
+schema before anything was generated from it.
+
+**What the assistant did:**
+
+- Wrote eleven TypeORM entity classes plus two abstract base classes (`AuditedEntity` for records
+  that change, `AppendOnlyEntity` for events), covering the full attribute set the course requires
+  on each core entity.
+- Put the double-award and consistency rules in the database rather than in application code:
+  unique keys on `(habit_id, completed_on)`, `(participation_id, check_in_date)`,
+  `(challenge_id, user_id)`, `(user_id, period_month, category)`, and
+  `(reference_type, reference_id, reason)` on the ledger, plus check constraints for the date
+  window, positive capacity and amounts, and a non-zero ledger amount.
+- Configured the `DataSource` with `synchronize: false` and generated the initial migration with
+  `typeorm migration:generate`. No SQL was hand-written.
+- Wrote a seed script covering all three roles, all five challenge statuses, and the points economy
+  end to end.
+
+**Corrections and decisions I made:**
+
+1. I required the review stop before migrations, so the schema could be checked while it was still
+   cheap to change.
+2. Enum values, category lists, point values, and the seeded scenario were reviewed by me for fit
+   with the problem statement I wrote.
+
+**Points worth recording about the approach**, since they are the parts most likely to be asked
+about:
+
+- Calendar dates are stored as `date` and carried as `YYYY-MM-DD` strings rather than JavaScript
+  `Date` objects, because a `date` has no timezone and mapping it to `Date` shifts the day away from
+  UTC — which would corrupt check-in, streak, and budget-month logic.
+- Nothing caches an aggregate: no points balance on the user, no participant count on the
+  challenge, no streak on the habit. Each is derived by query, so no stored copy can disagree with
+  the rows it summarises.
+- Point values live in `services/PointsPolicy.ts`, not on entities. A points-per-completion column
+  on `Habit` would let a user set the reward on their own habit.
+
+**What I verified:**
+
+- `schema:log` builds the metadata and prints the DDL before any migration existed, confirming the
+  relations and check constraints resolve to the right column names.
+- `migration:run` applies cleanly to an empty database, and re-running `migration:generate`
+  afterwards reports "No changes in database schema were found" — proving the entity classes and the
+  applied schema agree, with no drift.
+- Read-only `psql` inspection: the `challenges` table matches the specification's attribute table
+  column for column.
+- Six deliberate constraint violations (duplicate habit completion, duplicate ledger reference,
+  mid-month budget period, backwards challenge dates, zero-amount ledger row, duplicate
+  participation) are each rejected by PostgreSQL. Run inside a transaction that was rolled back.
+- `npm run seed` twice: row counts do not double, and the ledger sums to the balances I calculated
+  by hand (70 and 50).
+- Lint and type-check pass, including the generated migration.
