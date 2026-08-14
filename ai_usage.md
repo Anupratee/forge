@@ -228,3 +228,57 @@ edit → resubmit → approve → visible → join → check in — and then cov
 | Uploads | a real multipart create stores a generated filename and serves the exact bytes back; a shell script declared as `x-sh` is refused; a genuine PNG named `.txt` is refused; `../../../../pwned.png` is stored safely inside `covers/` |
 
 All ten commits for this phase also type-check independently.
+
+### Phase 5 — Habits, budgets, the reward store, and the ledger
+
+**What I asked for:** build habit tracking with streaks, monthly budgets and expenses, the
+Admin-managed reward store, redemption, and the points ledger endpoint.
+
+**What the assistant did:** 27 endpoints across four resources, a pure streak calculator with unit
+tests, `PointsService.spend` completing the economy, and the store with its redemption transaction.
+
+**A real bug this phase, worth recording because of how it was found:**
+
+Recording a habit completion returned a 500. `pg` parses a PostgreSQL `date` into a JavaScript `Date`
+at *local* midnight — exactly the conversion the schema was designed to avoid. TypeORM hides it when
+hydrating an entity, but a **raw** query does not, so `completedOn` was a string in one code path and
+a `Date` in another, both declared `string`. The streak calculation then crashed on "Invalid time
+value".
+
+Two things stand out. First, the fix belongs at the driver boundary — one type parser registration —
+rather than as a defensive conversion at each call site; that also fixed the same latent problem in
+the challenge check-in code. Second, **the unit tests could not have caught it**: they pass strings,
+which is what the code always claimed to receive. Only a request against a real database exposed it.
+That is the argument for the end-to-end verification runs, not just the unit tests.
+
+**Design decisions worth recording:**
+
+1. **Nothing stores a derived total.** Not a streak, not budget spend, not a balance. Each is computed
+   by query per read, so none can drift from the rows it summarises — and each one of them is what a
+   points award is paid against.
+2. **Money is summed by PostgreSQL, never in JavaScript.** Verified exact to the cent: 350.50 + 400.25
+   gives 750.75 and a remaining balance of 249.25 with no floating-point noise.
+3. **The streak bonus is keyed on "the run ending on this date"**, not "the streak right now", so
+   backfilling a missed day still closes the week it belongs to. That was worth 24 unit tests covering
+   month, year, leap-day and DST boundaries.
+4. **The adherence bonus is claimed with a POST and only after the month closes.** A GET that quietly
+   mints points is not something to build, and claiming mid-month would pay out on day one.
+5. **`source` on an expense is set by the server.** Letting a client relabel a manual entry as an
+   import would make the audit trail worthless.
+6. **Redemption is one transaction over four writes**, with the item locked and then the user.
+
+**What I verified:** a 68-check script against a running server, all passing, plus a separate
+concurrency test.
+
+| Area | Checks that passed |
+| --- | --- |
+| Habits | seven consecutive days pay 10 each and the seventh adds the 25-point bonus (35 that day); a duplicate day is 409; a future date is 400; a habit with history cannot be deleted, only archived; an archived habit refuses completions |
+| Privacy | an Admin listing habits is **403**; another User reading a habit is **404, not 403**; asha cannot see rohan's expenses |
+| Budgets | duplicate category/month is 409; a day-precision month is 400; spend and remaining are exact to the cent; over-budget flips correctly; the month summary reports categories with no goal |
+| Adherence award | refused mid-month (409); claimable once closed; pays exactly 50; **a second claim is 409**; an exceeded budget is refused |
+| Store | `availableOnly=true` hides out-of-stock; type filter and cost sort; a User cannot reach `/manage` (403); a themeless cosmetic and a themed voucher are both 400; nested theme colours are validated |
+| Redemption | balance falls by exactly the cost; stock decrements; **an unaffordable redemption is 409 and writes no ledger row and changes no stock**; out-of-stock is 409; a redeemed item is deactivated rather than deleted and stays in the purchase history |
+| Ledger | pagination, newest first; no internal `referenceId` exposed; **the balance equals the sum of the ledger** |
+| **Concurrency** | two simultaneous redemptions of an item costing 70% of the balance → 201 and 409, balance stayed non-negative; two buyers racing for the last unit → 201 and 409, stock ended at 0, not −1 |
+
+All twelve commits for this phase type-check independently, and the 24 unit tests pass.
