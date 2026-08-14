@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { adminRoutes } from './admin.routes';
 import { authRoutes } from './auth.routes';
+import { challengeRoutes } from './challenges.routes';
 
 /**
  * Everything under `/api`, assembled in one place.
@@ -12,3 +13,4 @@ export const apiRouter = Router();
 
 apiRouter.use('/auth', authRoutes);
 apiRouter.use('/admin', adminRoutes);
+apiRouter.use('/challenges', challengeRoutes);
