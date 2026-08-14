@@ -1,0 +1,17 @@
+import type { ValueTransformer } from 'typeorm';
+
+/**
+ * Maps a PostgreSQL `numeric` column to a JavaScript `number`.
+ *
+ * The `pg` driver returns `numeric` as a string, because the type is arbitrary-precision and a
+ * double cannot represent all of it. Every money column here is `numeric(12, 2)` — ten integer
+ * digits at most — which IEEE-754 represents exactly at two decimal places, so converting is safe
+ * and keeps callers out of string arithmetic.
+ *
+ * Money is still never *summed* in JavaScript: totals come from SQL aggregates, where PostgreSQL
+ * does the arithmetic in `numeric` and only the result crosses this boundary.
+ */
+export const numericTransformer: ValueTransformer = {
+  to: (value: number | null): number | null => value,
+  from: (value: string | null): number | null => (value === null ? null : Number(value)),
+};
