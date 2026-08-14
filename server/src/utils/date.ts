@@ -22,6 +22,15 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
  */
 export const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
+/**
+ * Matches a calendar month, `YYYY-MM`.
+ *
+ * Budget goals are accepted as a month rather than a date, so a caller cannot express something the schema
+ * forbids: `period_month` stores the first of the month and a check constraint enforces it, which would
+ * make `2026-08-17` a request the database must reject. {@link startOfMonth} expands the accepted value.
+ */
+export const ISO_MONTH_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
+
 /** Formats a `Date` as the `YYYY-MM-DD` string the schema stores. */
 export function toIsoDate(value: Date): string {
   return value.toISOString().slice(0, 10);
