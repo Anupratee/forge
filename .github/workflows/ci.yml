@@ -1,0 +1,101 @@
+name: CI
+
+# The clean-code and authorization constraints this project is graded on are only real if something
+# checks them on every push. Locally they are a habit; here they are a gate.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A second push to the same branch makes the first run's result irrelevant.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  server:
+    name: server — lint, types, tests, build
+    runs-on: ubuntu-latest
+
+    # The integration tests run against a real PostgreSQL, because most of what they prove is enforced
+    # by PostgreSQL: the unique keys behind "an action pays out once", the row lock behind "spending
+    # cannot exceed what was earned". Against a stub they would prove only that the application asks
+    # nicely. The suite creates its own `forge_test` database here and applies the migrations to it.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: forge
+          POSTGRES_USER: forge
+          POSTGRES_PASSWORD: forge_ci_password
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U forge -d forge"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_NAME: forge
+      DB_USER: forge
+      DB_PASSWORD: forge_ci_password
+      # Not a secret. It signs tokens that exist for the length of one test run, against a database
+      # that is destroyed with the runner. A repository secret here would imply it guards something.
+      JWT_SECRET: ci_only_signing_key_not_used_anywhere_else
+
+    defaults:
+      run:
+        working-directory: server
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      # `ci`, not `install`: it installs exactly the lockfile and fails if package.json disagrees with
+      # it, so a dependency cannot drift in without the lockfile being committed.
+      - run: npm ci
+
+      - run: npm run lint
+
+      # Vitest transpiles without type-checking, so this is the only thing that reads the types — and
+      # it covers the tests as well as the source.
+      - run: npm run typecheck
+
+      - run: npm test
+
+      # Last, because a build that succeeds while the tests fail is not worth knowing about.
+      - run: npm run build
+
+  client:
+    name: client — lint, types, build
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: client
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - run: npm ci
+
+      - run: npm run lint
+
+      # `npm run build` runs `tsc -b` before Vite, so the type-check is not redundant with it — it is
+      # the same check reported separately, which makes a failure say which of the two broke.
+      - run: npm run typecheck
+
+      - run: npm run build
