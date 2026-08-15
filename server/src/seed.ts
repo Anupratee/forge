@@ -14,6 +14,7 @@ import { Redemption } from './entities/Redemption';
 import { RewardItem, RewardItemType } from './entities/RewardItem';
 import { Role, User, UserStatus } from './entities/User';
 import { PointsPolicy } from './services/PointsPolicy';
+import { truncateDomainTables } from './utils/database';
 import { addDays, startOfMonth, today } from './utils/date';
 import { hashPassword } from './utils/password';
 
@@ -35,27 +36,6 @@ import { hashPassword } from './utils/password';
 /** Shared across every seeded account, so the demo needs one password rather than six. */
 const SEED_PASSWORD = 'Forge!2026';
 
-/**
- * Truncated in one statement. `migrations` is deliberately absent: the schema stays applied, only the
- * domain rows are replaced.
- *
- * CASCADE is required because `users.equipped_redemption_id` points into `redemptions`, so no
- * ordering of these tables alone would satisfy every foreign key.
- */
-const DOMAIN_TABLES = [
-  'points_ledger',
-  'redemptions',
-  'challenge_check_ins',
-  'challenge_participations',
-  'habit_completions',
-  'habits',
-  'expenses',
-  'budget_goals',
-  'challenges',
-  'reward_items',
-  'users',
-];
-
 interface SeededUsers {
   admin: User;
   maya: User;
@@ -76,10 +56,6 @@ function dayThisMonth(offset: number): string {
   const now = today();
   const daysElapsed = Number(now.slice(8, 10)) - 1;
   return addDays(startOfMonth(now), Math.min(offset, daysElapsed));
-}
-
-async function truncateDomainTables(manager: EntityManager): Promise<void> {
-  await manager.query(`TRUNCATE TABLE ${DOMAIN_TABLES.join(', ')} RESTART IDENTITY CASCADE`);
 }
 
 /**
