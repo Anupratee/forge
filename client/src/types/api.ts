@@ -62,6 +62,13 @@ export interface PublicUser {
   status: UserStatus;
   leaderboardOptIn: boolean;
   createdAt: string;
+  /** The cosmetic redemption currently worn, or null. At most one, by the shape of the column. */
+  equippedRedemptionId: string | null;
+  /**
+   * The palette that cosmetic applies, resolved server-side so it arrives with the session and can be
+   * applied on the first paint rather than after a second request.
+   */
+  equippedTheme: CosmeticTheme | null;
 }
 
 export interface AuthResult {
@@ -290,4 +297,83 @@ export interface SystemSummary {
     pointsSpent: number;
     redemptions: number;
   };
+}
+
+// ------------------------------------------------------------- Administration
+
+/** An account as an Admin sees it. Governance data only — never anything private to the user. */
+export interface ManagedUser {
+  id: string;
+  email: string;
+  displayName: string;
+  role: Role;
+  status: UserStatus;
+  leaderboardOptIn: boolean;
+  lastLoginAt: string | null;
+  createdAt: string;
+  /** True for the Admin making the request, so the UI can explain why their own controls are absent. */
+  isSelf: boolean;
+}
+
+// -------------------------------------------------------------- Leaderboard
+
+export interface LeaderboardEntry {
+  /** Ties share a position, because the ranking is computed with SQL `RANK()`. */
+  rank: number;
+  userId: string;
+  displayName: string;
+  balance: number;
+  /** The palette of the cosmetic this user is wearing — the visible point of buying one. */
+  theme: CosmeticTheme | null;
+  isSelf: boolean;
+}
+
+/** Where the caller stands, whether or not their rank falls on the page being shown. */
+export interface SelfStanding {
+  optedIn: boolean;
+  rank: number | null;
+  balance: number;
+}
+
+export type LeaderboardPage = Page<LeaderboardEntry> & { me: SelfStanding };
+
+// ---------------------------------------------------------------- Cosmetics
+
+export interface EquippedCosmetic {
+  redemptionId: string | null;
+  theme: CosmeticTheme | null;
+}
+
+// ------------------------------------------------------------------- Import
+
+/** One parsed row, with whatever is wrong with it. Present even when invalid, so it can be fixed. */
+export interface PreviewRow {
+  /** 1-based position in the source file, so a message can say "row 7" and mean what the user sees. */
+  line: number;
+  draft: Partial<{
+    title: string;
+    description: string;
+    amount: number;
+    category: ExpenseCategory;
+    spentOn: string;
+  }>;
+  errors: FieldFailure[];
+}
+
+export interface ImportPreview {
+  rows: PreviewRow[];
+  validCount: number;
+  invalidCount: number;
+  /** True when the file held more rows than one request may carry. */
+  truncated: boolean;
+}
+
+export interface ImportResult {
+  imported: number;
+}
+
+/** Which import methods this server can offer — the AI route needs an API key it may not have. */
+export interface ImportOptions {
+  csv: boolean;
+  ai: boolean;
 }

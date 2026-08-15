@@ -19,6 +19,18 @@ export interface RegisterRequest {
   role: typeof Role.USER | typeof Role.CREATOR;
 }
 
+/**
+ * What a user may change about themselves.
+ *
+ * Role, status, and email are absent because the server's DTO rejects them outright — this type
+ * mirrors that restriction rather than enforcing it.
+ */
+export interface UpdateProfileRequest {
+  displayName?: string;
+  bio?: string;
+  leaderboardOptIn?: boolean;
+}
+
 export const authApi = {
   async login(request: LoginRequest): Promise<AuthResult> {
     const { data } = await api.post<AuthResult>('/auth/login', request);
@@ -39,6 +51,12 @@ export const authApi = {
    */
   async me(): Promise<PublicUser> {
     const { data } = await api.get<PublicUser>('/auth/me');
+    return data;
+  },
+
+  /** Updates the caller's own profile. The subject is the token's, so there is no id to get wrong. */
+  async updateMe(request: UpdateProfileRequest): Promise<PublicUser> {
+    const { data } = await api.patch<PublicUser>('/auth/me', request);
     return data;
   },
 };

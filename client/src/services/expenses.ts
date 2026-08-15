@@ -1,5 +1,11 @@
-import type { ExpensePage, ExpenseSummary } from '../types/api';
-import type { ExpenseCategory } from '../types/enums';
+import type {
+  ExpensePage,
+  ExpenseSummary,
+  ImportOptions,
+  ImportPreview,
+  ImportResult,
+} from '../types/api';
+import type { ExpenseCategory, ExpenseSource } from '../types/enums';
 import type { QueryParams } from './api';
 import { api, toFormData, toParams } from './api';
 
@@ -70,5 +76,45 @@ export const expensesApi = {
 
   async remove(id: string): Promise<void> {
     await api.delete(`/expenses/${id}`);
+  },
+
+  // -------------------------------------------------------------------- Import
+
+  /** Whether this server can offer the AI route — it needs an API key a deployment may not have. */
+  async importOptions(): Promise<ImportOptions> {
+    const { data } = await api.get<ImportOptions>('/expenses/import/options');
+    return data;
+  },
+
+  /** Parses a CSV and reports what it found. Writes nothing. */
+  async previewCsv(file: File): Promise<ImportPreview> {
+    const form = new FormData();
+    form.append('file', file);
+
+    const { data } = await api.post<ImportPreview>('/expenses/import/csv', form);
+    return data;
+  },
+
+  /** Reads a statement PDF into the same preview shape. Also writes nothing. */
+  async previewStatement(file: File): Promise<ImportPreview> {
+    const form = new FormData();
+    form.append('file', file);
+
+    const { data } = await api.post<ImportPreview>('/expenses/import/statement', form);
+    return data;
+  },
+
+  /**
+   * Writes the rows the user reviewed and accepted.
+   *
+   * The server re-validates every row rather than trusting that these are the ones it offered — the
+   * preview is a suggestion, and the rows come back edited by design.
+   */
+  async confirmImport(
+    source: typeof ExpenseSource.CSV_IMPORT | typeof ExpenseSource.AI_IMPORT,
+    rows: CreateExpenseInput[],
+  ): Promise<ImportResult> {
+    const { data } = await api.post<ImportResult>('/expenses/import/confirm', { source, rows });
+    return data;
   },
 };

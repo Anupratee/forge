@@ -62,7 +62,18 @@ export const queryKeys = {
     ledger: (query: QueryParams) => ['points', 'ledger', query] as const,
   },
 
+  leaderboard: {
+    all: ['leaderboard'] as const,
+    list: (query: QueryParams) => ['leaderboard', 'list', query] as const,
+  },
+
   admin: {
+    all: ['admin'] as const,
     summary: ['admin', 'summary'] as const,
+    users: (query: QueryParams) => ['admin', 'users', query] as const,
+  },
+
+  imports: {
+    options: ['imports', 'options'] as const,
   },
 } as const;

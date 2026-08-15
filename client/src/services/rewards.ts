@@ -1,5 +1,6 @@
 import type {
   CosmeticTheme,
+  EquippedCosmetic,
   DeactivatedInstead,
   Page,
   RedeemResult,
@@ -60,6 +61,17 @@ export const rewardsApi = {
   /** Spends points in a transaction that row-locks the buyer and the item. */
   async redeem(itemId: string): Promise<RedeemResult> {
     const { data } = await api.post<RedeemResult>(`/rewards/${itemId}/redeem`);
+    return data;
+  },
+
+  /**
+   * Wears a cosmetic the caller bought, or takes off whatever they are wearing when given null.
+   *
+   * A PUT because it sets one value: sending the same body twice leaves the same state. "At most one
+   * equipped" is structural on the server — a single column on the user — not a rule enforced here.
+   */
+  async equip(redemptionId: string | null): Promise<EquippedCosmetic> {
+    const { data } = await api.put<EquippedCosmetic>('/rewards/equipped', { redemptionId });
     return data;
   },
 
