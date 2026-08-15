@@ -1,4 +1,3 @@
-import path from 'node:path';
 import { DataSource } from 'typeorm';
 import { SnakeNamingStrategy } from 'typeorm-naming-strategies';
 // Side-effect import: registers the `date` type parser before any connection is opened, so a calendar date
@@ -15,6 +14,7 @@ import { PointsLedger } from '../entities/PointsLedger';
 import { Redemption } from '../entities/Redemption';
 import { RewardItem } from '../entities/RewardItem';
 import { User } from '../entities/User';
+import { InitialSchema1786730174250 } from '../migrations/1786730174250-InitialSchema';
 import { env, isProduction, isTest } from './env';
 
 /**
@@ -62,10 +62,19 @@ export const AppDataSource = new DataSource({
   ],
 
   /**
-   * Migrations, by contrast, must be a glob: their filenames are generated and cannot be known
-   * ahead of time. The extension is left open so the same config works from `src` and from `dist`.
+   * Migrations are listed too, and for a second reason beyond the one above.
+   *
+   * A glob makes TypeORM load the files itself, with its own `require`, outside whatever is
+   * transpiling the rest of the application — which works under `tsx` and under `node dist`, and
+   * fails under the test runner, where a `.ts` file reached by a raw `require` is a syntax error.
+   * Importing the classes means they arrive through the same pipeline as every other module, so the
+   * integration tests can build their schema from these migrations rather than from `synchronize`.
+   *
+   * TypeORM orders them by the timestamp in the class name, not by their position here.
+   *
+   * `migration:generate` writes a new file; add it to this list, or it will not run.
    */
-  migrations: [path.join(__dirname, '..', 'migrations', '*.{ts,js}')],
+  migrations: [InitialSchema1786730174250],
 
   /**
    * Entity property names are camelCase and column names are snake_case, which keeps the generated
@@ -79,5 +88,12 @@ export const AppDataSource = new DataSource({
    */
   namingStrategy: new SnakeNamingStrategy(),
 
-  logging: isProduction || isTest ? ['error'] : ['error', 'warn', 'migration', 'schema'],
+  /**
+   * Silent under test, deliberately.
+   *
+   * The integration suite provokes constraint violations on purpose — a second check-in on the same
+   * day, a redemption that loses its race — and every one of them would be logged as a query error. A
+   * run that prints a dozen expected failures is a run in which a real one is easy to miss.
+   */
+  logging: isTest ? false : isProduction ? ['error'] : ['error', 'warn', 'migration', 'schema'],
 });
