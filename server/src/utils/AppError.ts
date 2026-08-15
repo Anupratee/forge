@@ -66,3 +66,20 @@ export class ConflictError extends AppError {
   readonly status = 409;
   readonly code = 'CONFLICT';
 }
+
+/** The request body is larger than the API accepts. */
+export class PayloadTooLargeError extends AppError {
+  readonly status = 413;
+  readonly code = 'PAYLOAD_TOO_LARGE';
+}
+
+/**
+ * The caller has made too many attempts and should wait.
+ *
+ * Thrown by the rate limiter rather than answered by it directly, so a throttled response has the same
+ * `{ code, message }` shape as every other failure and the client's one error reader handles it.
+ */
+export class TooManyRequestsError extends AppError {
+  readonly status = 429;
+  readonly code = 'TOO_MANY_REQUESTS';
+}
