@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Badge } from '../components/Badge';
 import { Button } from '../components/Button';
 import { Card, CardBody, PageHeader, StatCard } from '../components/Card';
@@ -43,7 +44,14 @@ export function ExpensesPage() {
       <PageHeader
         title="Expenses"
         description="Private to you. Each one counts against the goal covering its month and category."
-        action={<Button onClick={() => setCreating(true)}>Log expense</Button>}
+        action={
+          <div className="flex gap-2">
+            <Link to="/expenses/import">
+              <Button variant="secondary">Import</Button>
+            </Link>
+            <Button onClick={() => setCreating(true)}>Log expense</Button>
+          </div>
+        }
       />
 
       <Card>
