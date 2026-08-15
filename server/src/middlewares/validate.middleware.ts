@@ -46,9 +46,24 @@ declare global {
  */
 export function validateBody<T extends object>(Dto: DtoClass<T>): RequestHandler {
   return async (req, _res, next) => {
+    /**
+     * A body that is absent is not the same as a body that is the wrong shape.
+     *
+     * Express 5 leaves `req.body` undefined when a request carries none at all, and class-validator
+     * throws outright on a non-object — which arrives at the error handler as a logged 500, reporting
+     * a client mistake as a server fault. So an absent body becomes an empty object and the DTO's own
+     * rules decide, which keeps a legitimately empty request (a check-in with no note) working; and a
+     * body that is present but is an array or a bare value is refused here with a message that says so.
+     */
+    const raw: unknown = req.body ?? {};
+
+    if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+      throw new ValidationError('Request body must be a JSON object');
+    }
+
     // Hand the controller the validated instance rather than the raw body: it has been stripped of
     // unknown properties and had its values coerced, and the raw body has not.
-    req.body = await toValidatedInstance(Dto, req.body);
+    req.body = await toValidatedInstance(Dto, raw);
     next();
   };
 }

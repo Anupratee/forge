@@ -10,7 +10,32 @@ import { env, isAiImportEnabled, isCacheEnabled } from './config/env';
 import { ensureUploadDirectories, UPLOADS_ROOT, UPLOADS_URL_PREFIX } from './config/uploads';
 import { errorHandler, notFoundHandler } from './middlewares/error.middleware';
 import { apiRouter } from './routes';
-import { NotFoundError } from './utils/AppError';
+import { NotFoundError, PayloadTooLargeError, ValidationError } from './utils/AppError';
+
+/**
+ * The largest JSON body the API accepts.
+ *
+ * Generous enough for the biggest legitimate request — a confirmed expense import of several hundred
+ * rows — and small enough that a body has to be deliberate to exceed it. Uploads do not pass through
+ * here; Multer parses those, with its own limit from `MAX_UPLOAD_BYTES`.
+ */
+const JSON_BODY_LIMIT = '1mb';
+
+/**
+ * What `express.json()` refuses, and what to say about it.
+ *
+ * body-parser rejects a malformed or oversized body by emitting an error with a `type` — never an
+ * `AppError`, so without this the error handler treats each one as a bug and answers 500. Malformed
+ * JSON is a client mistake and deserves to be told as much, and a 500 in the log for it is noise that
+ * hides real faults.
+ */
+const BODY_PARSER_FAILURES: Record<string, () => Error> = {
+  'entity.parse.failed': () => new ValidationError('Request body is not valid JSON'),
+  'entity.too.large': () =>
+    new PayloadTooLargeError(`Request body must be no larger than ${JSON_BODY_LIMIT}`),
+  'encoding.unsupported': () =>
+    new ValidationError('Request body uses an unsupported content encoding'),
+};
 
 /**
  * Builds the Express application.
@@ -24,7 +49,16 @@ export function createApp(): Express {
 
   app.use(helmet());
   app.use(cors({ origin: env.corsOrigin, credentials: true }));
-  app.use(express.json({ limit: '1mb' }));
+  app.use(express.json({ limit: JSON_BODY_LIMIT }));
+
+  // Scoped to the parser, directly after it, for the same reason as the uploads handler below: how
+  // body-parser reports a failure is knowledge that belongs beside body-parser, not in the shared
+  // error handler.
+  app.use(((error, _req, _res, next) => {
+    const build = BODY_PARSER_FAILURES[(error as { type?: string }).type ?? ''];
+
+    next(build === undefined ? error : build());
+  }) satisfies ErrorRequestHandler);
 
   app.get('/health', (_req: Request, res: Response) => {
     res.json({
