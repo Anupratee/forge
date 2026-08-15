@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import type { RegisterDto } from '../dtos/RegisterDto';
 import type { LoginDto } from '../dtos/LoginDto';
+import type { UpdateProfileDto } from '../dtos/UpdateProfileDto';
 import { Role } from '../entities/User';
 import { getAuth } from '../middlewares/auth.middleware';
 import type { BodyOf } from '../middlewares/validate.middleware';
@@ -44,6 +45,12 @@ export class AuthController {
   me = async (req: Request, res: Response): Promise<void> => {
     const { userId } = getAuth(req);
     res.json(await this.authService.getProfile(userId));
+  };
+
+  /** The subject is always the token's own, so there is no id to pass and none to get wrong. */
+  updateMe = async (req: BodyOf<UpdateProfileDto>, res: Response): Promise<void> => {
+    const { userId } = getAuth(req);
+    res.json(await this.authService.updateProfile(userId, req.body));
   };
 }
 

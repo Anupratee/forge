@@ -1,11 +1,13 @@
 import type { DataSource, Repository } from 'typeorm';
 import { AppDataSource } from '../config/data-source';
+import type { CosmeticTheme } from '../entities/RewardItem';
 import type { Role } from '../entities/User';
 import { User, UserStatus } from '../entities/User';
 import { ConflictError, UnauthorizedError } from '../utils/AppError';
 import { isUniqueViolation } from '../utils/database';
 import { signAccessToken } from '../utils/jwt';
 import { hashPassword, verifyPassword } from '../utils/password';
+import type { UpdateProfileDto } from '../dtos/UpdateProfileDto';
 
 /**
  * The roles an account may be created with.
@@ -43,6 +45,14 @@ export interface PublicUser {
   status: UserStatus;
   leaderboardOptIn: boolean;
   createdAt: Date;
+  /** The cosmetic redemption currently worn, or null. At most one, by the shape of the column. */
+  equippedRedemptionId: string | null;
+  /**
+   * The palette that cosmetic applies, resolved here so the client receives it with the session and can
+   * apply it on the first paint. Sending the id alone would cost a second request before the theme
+   * could be shown, and the page would flash the default palette in between.
+   */
+  equippedTheme: CosmeticTheme | null;
 }
 
 export interface AuthResult {
@@ -135,7 +145,10 @@ export class AuthService {
 
     await this.users.update(user.id, { lastLoginAt: new Date() });
 
-    return this.issue(toPublicUser(user));
+    // Read back through `getProfile` rather than describing the entity in hand: the equipped theme
+    // lives two joins away, and the login response must say the same thing a following `GET /auth/me`
+    // will.
+    return this.issue(await this.getProfile(user.id));
   }
 
   /**
@@ -169,13 +182,43 @@ export class AuthService {
 
   /** The caller's own profile, for `GET /auth/me`. */
   async getProfile(userId: string): Promise<PublicUser> {
-    const user = await this.users.findOneBy({ id: userId });
+    return toPublicUser(await this.requireUser(userId));
+  }
+
+  /**
+   * Updates the caller's own profile.
+   *
+   * Only the fields on `UpdateProfileDto` — role, status, and email are not among them, so this cannot
+   * become a way to self-promote or self-reinstate. Fields left out are left alone, which is what makes
+   * a single-field PATCH from a toggle safe.
+   */
+  async updateProfile(userId: string, input: UpdateProfileDto): Promise<PublicUser> {
+    const user = await this.requireUser(userId);
+
+    if (input.displayName !== undefined) user.displayName = input.displayName.trim();
+    if (input.bio !== undefined) user.bio = input.bio.trim() === '' ? null : input.bio;
+    if (input.leaderboardOptIn !== undefined) user.leaderboardOptIn = input.leaderboardOptIn;
+
+    return toPublicUser(await this.users.save(user));
+  }
+
+  /**
+   * Loads a user with the equipped cosmetic resolved.
+   *
+   * The relation is loaded rather than joined by hand because it is two hops — user to redemption to
+   * reward item — and only the leaf's `cosmeticTheme` is wanted.
+   */
+  private async requireUser(userId: string): Promise<User> {
+    const user = await this.users.findOne({
+      where: { id: userId },
+      relations: { equippedRedemption: { rewardItem: true } },
+    });
 
     if (!user) {
       throw new UnauthorizedError('Access token is missing, invalid, or expired');
     }
 
-    return toPublicUser(user);
+    return user;
   }
 
   private issue(user: PublicUser): AuthResult {
@@ -205,6 +248,10 @@ function toPublicUser(user: User): PublicUser {
     status: user.status,
     leaderboardOptIn: user.leaderboardOptIn,
     createdAt: user.createdAt,
+    equippedRedemptionId: user.equippedRedemptionId,
+    // Optional chaining rather than a non-null assertion: the relation is only loaded by
+    // `requireUser`, and a caller that skipped it should get null, not a crash.
+    equippedTheme: user.equippedRedemption?.rewardItem?.cosmeticTheme ?? null,
   };
 }
 
