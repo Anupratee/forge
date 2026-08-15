@@ -1,4 +1,5 @@
 import { Outlet } from 'react-router-dom';
+import { useTheme } from '../hooks/useTheme';
 import { Navbar } from './Navbar';
 
 /**
@@ -6,8 +7,14 @@ import { Navbar } from './Navbar';
  *
  * A layout route rather than a wrapper each page imports, so pages stay purely about their own content
  * and none of them can forget the navigation.
+ *
+ * Mounting `useTheme` here is what makes an equipped cosmetic repaint the whole application: the
+ * palette is written onto `:root`, and every component already reads its colours through those
+ * variables rather than hard-coding them.
  */
 export function AppLayout() {
+  useTheme();
+
   return (
     <div className="min-h-dvh">
       <Navbar />

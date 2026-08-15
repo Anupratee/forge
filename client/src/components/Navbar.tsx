@@ -30,9 +30,11 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/expenses', label: 'Expenses', roles: [Role.USER] },
   { to: '/store', label: 'Store', roles: [Role.USER] },
   { to: '/points', label: 'Points', roles: [Role.USER] },
+  { to: '/leaderboard', label: 'Leaderboard' },
   { to: '/authored', label: 'My challenges', roles: [Role.CREATOR] },
   { to: '/admin/approvals', label: 'Approvals', roles: [Role.ADMIN] },
   { to: '/admin/store', label: 'Reward store', roles: [Role.ADMIN] },
+  { to: '/admin/users', label: 'Accounts', roles: [Role.ADMIN] },
 ];
 
 export function Navbar() {

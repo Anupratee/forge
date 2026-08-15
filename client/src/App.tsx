@@ -4,6 +4,7 @@ import { AppLayout } from './components/AppLayout';
 import { RequireRole } from './components/RequireRole';
 import { AuthProvider } from './context/AuthContext';
 import { AdminStorePage } from './pages/AdminStorePage';
+import { AdminUsersPage } from './pages/AdminUsersPage';
 import { ApprovalsPage } from './pages/ApprovalsPage';
 import { AuthoredChallengesPage } from './pages/AuthoredChallengesPage';
 import { BudgetPage } from './pages/BudgetPage';
@@ -12,8 +13,10 @@ import { ChallengeEditorPage } from './pages/ChallengeEditorPage';
 import { ChallengesPage } from './pages/ChallengesPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { ExpensesPage } from './pages/ExpensesPage';
+import { ImportExpensesPage } from './pages/ImportExpensesPage';
 import { HabitsPage } from './pages/HabitsPage';
 import { JoinedChallengesPage } from './pages/JoinedChallengesPage';
+import { LeaderboardPage } from './pages/LeaderboardPage';
 import { LoginPage } from './pages/LoginPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { ParticipantsPage } from './pages/ParticipantsPage';
@@ -71,12 +74,15 @@ export default function App() {
                 <Route index element={<DashboardPage />} />
                 <Route path="challenges" element={<ChallengesPage />} />
                 <Route path="challenges/:id" element={<ChallengeDetailPage />} />
+                {/* Opt-in, so it holds nothing private to anyone who has not joined it. */}
+                <Route path="leaderboard" element={<LeaderboardPage />} />
 
                 {/* Users: habits, money, and the store are private to their owner. */}
                 <Route element={<RequireRole allow={[Role.USER]} />}>
                   <Route path="habits" element={<HabitsPage />} />
                   <Route path="budget" element={<BudgetPage />} />
                   <Route path="expenses" element={<ExpensesPage />} />
+                  <Route path="expenses/import" element={<ImportExpensesPage />} />
                   <Route path="store" element={<StorePage />} />
                   <Route path="points" element={<PointsPage />} />
                   <Route path="my-challenges" element={<JoinedChallengesPage />} />
@@ -94,6 +100,7 @@ export default function App() {
                 <Route element={<RequireRole allow={[Role.ADMIN]} />}>
                   <Route path="admin/approvals" element={<ApprovalsPage />} />
                   <Route path="admin/store" element={<AdminStorePage />} />
+                  <Route path="admin/users" element={<AdminUsersPage />} />
                 </Route>
 
                 <Route path="*" element={<NotFoundPage />} />

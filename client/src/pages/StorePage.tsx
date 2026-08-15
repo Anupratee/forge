@@ -9,7 +9,8 @@ import { Loading } from '../components/Loading';
 import { Pagination } from '../components/Pagination';
 import { orUndefined, useListQuery } from '../hooks/useListQuery';
 import { usePointsBalance } from '../hooks/usePoints';
-import { useRedeem, useRedemptions, useStore } from '../hooks/useRewards';
+import { useEquipCosmetic, useRedeem, useRedemptions, useStore } from '../hooks/useRewards';
+import { useAuth } from '../hooks/useAuth';
 import { uploadUrl } from '../services/api';
 import type { RewardQuery } from '../services/rewards';
 import type { RewardItemSummary } from '../types/api';
@@ -191,6 +192,34 @@ function StoreItemCard({ item, balance }: { item: RewardItemSummary; balance: nu
   );
 }
 
+/**
+ * Wears a cosmetic, or takes it off.
+ *
+ * Only a cosmetic can be equipped, and only one at a time — both are the server's rules, the second
+ * structurally: the equipped redemption is a single column on the user, so writing a new value
+ * replaces the old one and there is nothing here to unset first.
+ *
+ * What is currently worn comes from the session profile rather than local state, so the palette on
+ * screen and the answer this button gives can never disagree.
+ */
+function EquipButton({ redemptionId }: { redemptionId: string }) {
+  const { user } = useAuth();
+  const equip = useEquipCosmetic();
+
+  const worn = user?.equippedRedemptionId === redemptionId;
+
+  return (
+    <Button
+      size="sm"
+      variant={worn ? 'secondary' : 'primary'}
+      busy={equip.isPending}
+      onClick={() => equip.mutate(worn ? null : redemptionId)}
+    >
+      {worn ? 'Take off' : 'Wear'}
+    </Button>
+  );
+}
+
 function RedemptionHistory() {
   const [page, setPage] = useState(1);
   const redemptions = useRedemptions({ page, pageSize: 5, sortDir: 'DESC' });
@@ -227,7 +256,7 @@ function RedemptionHistory() {
                   key={redemption.id}
                   className="flex items-center justify-between gap-4 px-5 py-3"
                 >
-                  <div>
+                  <div className="min-w-0">
                     <p className="font-medium text-slate-900 dark:text-slate-100">
                       {redemption.item.name}
                     </p>
@@ -242,10 +271,16 @@ function RedemptionHistory() {
                     </p>
                   </div>
 
-                  {/* The price paid is copied onto the row, so re-pricing the store never rewrites it. */}
-                  <span className="shrink-0 font-semibold tabular-nums text-red-600 dark:text-red-400">
-                    −{formatPoints(redemption.pointsSpent)}
-                  </span>
+                  <div className="flex shrink-0 items-center gap-3">
+                    {redemption.item.type === RewardItemType.COSMETIC && (
+                      <EquipButton redemptionId={redemption.id} />
+                    )}
+
+                    {/* The price paid is copied onto the row, so re-pricing the store never rewrites it. */}
+                    <span className="font-semibold tabular-nums text-red-600 dark:text-red-400">
+                      −{formatPoints(redemption.pointsSpent)}
+                    </span>
+                  </div>
                 </li>
               ))}
             </ul>
