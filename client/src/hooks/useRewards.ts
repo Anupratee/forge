@@ -55,6 +55,22 @@ export function useRedeem() {
   });
 }
 
+/**
+ * Wears a cosmetic, or takes one off with `null`.
+ *
+ * Invalidates the session profile rather than the store: the equipped theme rides on `PublicUser`, and
+ * `useTheme` reads it from there — so repainting the app is a consequence of the profile refreshing,
+ * not something this hook does itself.
+ */
+export function useEquipCosmetic() {
+  const invalidate = useInvalidate();
+
+  return useMutation({
+    mutationFn: (redemptionId: string | null) => rewardsApi.equip(redemptionId),
+    onSuccess: () => invalidate(queryKeys.auth.me, queryKeys.rewards.all),
+  });
+}
+
 export function useCreateRewardItem() {
   const invalidate = useInvalidate();
 
