@@ -449,3 +449,102 @@ the check, and it is the kind that quietly makes later runs disagree with earlie
 
 **What is not verified:** the live AI extraction call. No `ANTHROPIC_API_KEY` is configured, so the
 disabled path and the pipeline the extractor feeds are tested, and the model call itself is not.
+
+### Phase 8 — Hardening
+
+**What I asked for:** integration tests over the RBAC matrix and the points invariants, rate limiting
+on the auth routes, a CI workflow, and the README rewritten as a graded deliverable.
+
+**What the assistant did:** 280 tests across seven files, an integration harness with its own database,
+two production bug fixes the tests found, a GitHub Actions workflow for both packages, and the README.
+
+**The blocker this phase had to clear first.** Since Phase 5 the unit tests had been confined to pure
+modules, because Vitest transpiles with esbuild and esbuild does not implement `emitDecoratorMetadata`
+— so a TypeORM entity loaded under it registers no column metadata and every repository call fails.
+That single missing feature is what had kept integration tests out of the suite for three phases.
+Swapping the transform to SWC lifted it.
+
+TypeORM then failed a second way, and the fix was more interesting than the first. Given a glob, it
+loads migration files with its own `require`, outside whatever is transpiling everything else — which
+works under `tsx` and under `node dist`, and is a syntax error under the test runner. The fix was to
+list the migration classes in `data-source.ts` as imports, exactly as the entities were already listed
+there, for the reason already written in that file's docblock: a glob resolves differently in every
+environment and fails silently when it is wrong. The test environment simply made an existing latent
+fragility visible.
+
+**Two bugs the tests found, both of the same kind.** The RBAC matrix checks that each allowed role gets
+*past* the gate, not only that forbidden roles are refused — a route that answered 403 to everybody
+would satisfy the negative half perfectly. Those positive checks send requests with no body, and eleven
+of them came back **500**.
+
+Two distinct causes, both turning a client mistake into a reported server fault:
+
+1. Express 5 leaves `req.body` undefined when a request carries no body, and class-validator throws
+   outright on a non-object. Fixed by treating an absent body as an empty one — so the DTO's own rules
+   answer, and a legitimately empty request such as a check-in with no note still works — and refusing
+   a body that is present but is an array or a bare value.
+2. `express.json()` rejects malformed JSON with a body-parser error, which is not an `AppError`, so the
+   error handler treated it as a bug. Fixed with a handler scoped to the parser, mirroring the one
+   already sitting behind the static mount for the same reason: how a middleware reports its failures
+   is knowledge that belongs beside that middleware.
+
+Neither was reachable through the client, which always sends a well-formed body. Both would have been
+reachable by anyone with `curl`. A 500 is not a cosmetic difference from a 400 — it tells the caller
+the server broke, it hides what was actually wrong, and it fills the log with stack traces for things
+that were never faults.
+
+**One test I wrote that was wrong, and the code was right.** I asserted that one Creator asking for
+another Creator's participants gets 404. It returns 403, deliberately: an approved challenge is already
+visible to everyone through `GET /challenges/:id`, so hiding its existence would conceal nothing and
+only mislead. 404 is correct for an *unpublished* challenge, where existence really is secret. I had
+flattened a deliberate distinction into a rule. The test now asserts both halves, which documents the
+distinction better than the original would have.
+
+**Design decisions worth recording:**
+
+1. **The route matrix is written out by hand, not derived from the router.** A matrix generated from
+   the same `authorize` calls it is checking would agree with the code by construction — it would still
+   pass with a guard deleted. Transcribing it makes the test an independent statement of what the API
+   is meant to allow, so the two have to be changed together.
+2. **Every concurrency invariant is tested concurrently.** Duplicate check-ins and over-balance
+   redemptions are fired as simultaneous pairs, because both guarantees are enforced by PostgreSQL —
+   a unique key, a row lock — and the naive implementation they exist to rule out passes a sequential
+   test perfectly. The eight-simultaneous-redemptions case asserts the balance lands on exactly 10, not
+   merely on something non-negative.
+3. **Tests build their own fixtures against a database they emptied.** Reading seeded data would make a
+   test pass or fail on decisions taken in a file it never mentions — and Phase 7 had already produced
+   the other failure mode, a verification script whose cleanup deleted seed rows it had not created.
+4. **A separate `forge_test` database, and the harness refuses anything not named `…_test`.** The suite
+   truncates every domain table; pointing that at the database being demoed against would wipe the seed
+   mid-demo. A fixed name in the config would be a convention, and the refusal is what makes it a rule.
+5. **The test schema is built by running the real migrations.** Not `synchronize`, which would be
+   quicker and would also mean a migration that does not reproduce the entities passes unnoticed.
+6. **The rate limiter hands its refusal to `next` instead of writing a response**, so a throttled caller
+   reads the same `{ code, message }` envelope as every other failure and the error middleware stays the
+   only thing that sets a status.
+7. **The limiter stands down under `NODE_ENV=test` and is proved by its own test**, which builds one
+   through the same factory with `skip` returning false. Every supertest request arrives from the same
+   address, so a live limiter would have started refusing the suite's own logins — and leaving it
+   untested to avoid that would have been the worse trade.
+8. **Only registration and login are limited.** They are the only endpoints that answer a caller with no
+   token at all; everything else is behind `authenticate`, where the account itself can be suspended.
+
+**What I verified:** 280 tests, all passing, in about ten seconds. Lint, type-check, and build clean in
+both packages, `dist` free of the test harness, the migration CLI still working after the change above,
+and `migration:generate` reporting **"No changes in database schema were found"** — the drift check.
+
+| Suite | What it establishes |
+| --- | --- |
+| RBAC matrix (224) | Every protected route refuses every role it does not name, **and admits the ones it does**; every route including the open ones refuses a caller with no token |
+| Identity | A valid unexpired token stops working the moment the account is suspended, and loses the old role the moment an Admin changes it — the API never authorizes from the claim |
+| Ownership | A Creator cannot read another Creator's participants (403) or learn an unpublished challenge exists (404); a User cannot read or write another User's habit, budget, or expense (404 throughout) |
+| Escalation | `role`, `status`, and `email` on a profile update are **400, not silently dropped**; an Admin cannot suspend or demote themselves; a Creator cannot approve their own challenge |
+| Points | Balance equals the ledger sum; reads never mint; a duplicate completion or check-in is refused with **no extra row**; an unaffordable or out-of-stock redemption writes **none of its three rows** |
+| Concurrency | Of two simultaneous check-ins exactly one pays; of two simultaneous redemptions with one affordable exactly one succeeds; eight at once against a balance of 100 leaves exactly 10 |
+| Append-only | No route edits or deletes a ledger entry — not forbidden, absent |
+| Auth | bcrypt cost 12 stored and never returned; identical answers for a wrong password and an unknown email; a suspended account cannot sign in, and can again once reactivated |
+| Malformed requests | Absent, malformed, non-object, and oversized bodies are 400/413 with a message that says what was wrong |
+
+**What is not covered.** The client has no test suite; its type-check and build are what gate it, and
+CI runs both. The live AI extraction call remains unverified for want of an API key. Neither is a
+regression from a previous phase — both are stated so they are not mistaken for coverage.
