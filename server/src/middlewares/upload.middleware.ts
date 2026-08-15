@@ -106,3 +106,76 @@ export function uploadedPath(
 ): string | null {
   return file === undefined ? null : `${folder}/${file.filename}`;
 }
+
+/**
+ * Kinds of document an import accepts, and the extension each must carry.
+ *
+ * `text/plain` is listed for CSV because browsers and spreadsheet tools disagree about what a `.csv`
+ * is — Windows reports `application/vnd.ms-excel`, some browsers send `text/plain`. The extension is
+ * checked in every case, so a permissive MIME list does not mean a permissive filter.
+ */
+const DOCUMENT_TYPES = new Map<ImportKind, { mimes: string[]; extension: string }>([
+  [
+    'csv',
+    {
+      mimes: ['text/csv', 'application/csv', 'text/plain', 'application/vnd.ms-excel'],
+      extension: '.csv',
+    },
+  ],
+  ['pdf', { mimes: ['application/pdf'], extension: '.pdf' }],
+]);
+
+export type ImportKind = 'csv' | 'pdf';
+
+/**
+ * A single document upload held in memory, for the import endpoints.
+ *
+ * Memory rather than disk, unlike {@link uploadImage}: an imported file is read once, turned into rows,
+ * and has no further use. Writing it to disk would leave a copy of someone's bank statement on the
+ * server with nothing responsible for deleting it.
+ *
+ * The file is required here — an import with no file is a mistake, not an empty import — so a missing
+ * one is rejected rather than passed through.
+ */
+export function uploadDocument(field: string, kind: ImportKind): RequestHandler {
+  const spec = DOCUMENT_TYPES.get(kind);
+
+  const handler = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: env.uploads.maxBytes, files: 1, fields: 10 },
+    fileFilter: (_req, file, done) => {
+      if (spec === undefined) {
+        done(new ValidationError(`${kind} is not an accepted import type`));
+        return;
+      }
+
+      if (path.extname(file.originalname).toLowerCase() !== spec.extension) {
+        done(new ValidationError(`Expected a ${spec.extension} file`));
+        return;
+      }
+
+      if (!spec.mimes.includes(file.mimetype)) {
+        done(new ValidationError(`${file.mimetype} is not an accepted ${kind} type`));
+        return;
+      }
+
+      done(null, true);
+    },
+  }).single(field);
+
+  return (req, res, next) => {
+    handler(req, res, (error: unknown) => {
+      if (error instanceof MulterError) {
+        next(toValidationError(error));
+        return;
+      }
+      if (error === undefined || error === null) {
+        next(
+          req.file === undefined ? new ValidationError(`No ${kind} file was uploaded`) : undefined,
+        );
+        return;
+      }
+      next(error);
+    });
+  };
+}

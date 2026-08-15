@@ -11,7 +11,7 @@ type DtoClass<T> = new () => T;
 export type BodyOf<T> = Request<Record<string, string>, unknown, T>;
 
 /** One failed field, flattened into something a form can display next to an input. */
-interface FieldFailure {
+export interface FieldFailure {
   field: string;
   messages: string[];
 }
@@ -150,8 +150,11 @@ async function toValidatedInstance<T extends object>(Dto: DtoClass<T>, raw: unkn
 /**
  * class-validator reports failures as a tree, one node per property, nested for object properties.
  * Flattening to dotted paths keeps the response shape flat and predictable for a client.
+ *
+ * Exported because the import pipeline validates rows against the same DTOs and has to report their
+ * failures in the same shape — a second flattener would let the two drift.
  */
-function flatten(failures: ClassValidatorError[], parentPath = ''): FieldFailure[] {
+export function flatten(failures: ClassValidatorError[], parentPath = ''): FieldFailure[] {
   return failures.flatMap((failure) => {
     const path = parentPath === '' ? failure.property : `${parentPath}.${failure.property}`;
     const messages = Object.values(failure.constraints ?? {});
