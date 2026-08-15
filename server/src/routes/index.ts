@@ -5,6 +5,7 @@ import { budgetRoutes } from './budgets.routes';
 import { challengeRoutes } from './challenges.routes';
 import { expenseRoutes } from './expenses.routes';
 import { habitRoutes } from './habits.routes';
+import { leaderboardRoutes } from './leaderboard.routes';
 import { pointsRoutes } from './points.routes';
 import { rewardRoutes } from './rewards.routes';
 
@@ -24,3 +25,4 @@ apiRouter.use('/budgets', budgetRoutes);
 apiRouter.use('/expenses', expenseRoutes);
 apiRouter.use('/rewards', rewardRoutes);
 apiRouter.use('/points', pointsRoutes);
+apiRouter.use('/leaderboard', leaderboardRoutes);
