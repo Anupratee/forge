@@ -361,3 +361,91 @@ and the SPA serves with deep links and both dev proxies working.
 **One thing to note about that verification:** it drives the API, not the rendered UI. It proves every
 screen's data contract and every role boundary, which is where the grading and the risk are — but it
 does not prove a component renders. Phase 8's integration tests will cover the RBAC matrix formally.
+
+### Phase 7 — Extras, and the Admin gap Phase 6 found
+
+**What I asked for:** the four extras — leaderboard, CSV import, cosmetics, AI statement import — plus
+the Admin user-management endpoints that Phase 6 reported missing.
+
+**What the assistant did:** 13 endpoints across five areas, three new screens, and a `useTheme` hook,
+in 13 atomic commits.
+
+**The gap this phase closed.** The specification gives an Admin *"manage users — suspend, reactivate,
+change role"*, and no such endpoint existed after Phase 5. Nothing had failed, because nothing had
+asked; it surfaced only when the Phase 6 Admin dashboard had counts to show and no way to act on them.
+That is an argument for building the UI for a role before declaring that role's API finished.
+
+**A guard I wrote and then deleted, which is the most interesting thing here.** Adding role changes, I
+wrote the obvious safety check: refuse to demote the last remaining Admin, or the platform can never
+approve a challenge or reinstate an account again. Then I tried to write a test for it and could not.
+
+Working through it: the caller is always an active Admin — `authenticate` re-reads status and
+`authorize` re-reads role on every request — and cannot be the target, because changing your own role
+is already refused. So if the target is *also* an active Admin, there are at least two, and demoting
+one leaves one. And if the target is not an active Admin, demoting them cannot reduce the count at all.
+The invariant is already guaranteed by the self-change refusal.
+
+Worse, the check did fire in one case: demoting a **suspended** Admin, where the count of active Admins
+is 1 (the caller). That refuses a change which could not possibly strand anyone.
+
+So the guard was unreachable in the case it was written for and wrong in the case it did reach — which
+is worse than not having it, because it reads as protection. I removed it and wrote the argument into
+the docblock in its place. **The test I could not write was the thing that found it.**
+
+**A deliberate deviation from the plan.** The plan specified `pdf-parse` to extract statement text
+before sending it to the model. I send the PDF to the model as a document instead. That removes a
+dependency and handles the statements a text extractor cannot — scanned pages, multi-column layouts,
+tables whose reading order is not their text order — which is precisely the failure mode this feature
+exists for. Recorded in the service's docblock and in the commit rather than made silently.
+
+**Design decisions worth recording:**
+
+1. **The model never writes anything.** Extraction produces a *draft* that goes through the same
+   preview and the same `CreateExpenseDto` validation as a CSV row, and nothing reaches the database
+   until a person confirms what they saw. An extractor that can be wrong is safe behind human approval
+   and unsafe in front of a write — which is the whole reason the pipeline has two steps.
+2. **Confirm re-validates rather than trusting the preview.** The preview is a suggestion, not a token;
+   the rows come back edited by design, so treating them as pre-approved would make the edit box an
+   injection point.
+3. **One definition of a valid expense.** Imported rows are validated by the very class that validates
+   a typed one, so an import cannot be anything a hand-entered expense could not have been.
+4. **`source` accepts only import values.** Expense source is set by the server precisely so a client
+   cannot relabel a manual entry as an import; restricting the enum keeps that true in both directions —
+   an import also cannot pass itself off as manual.
+5. **Opting out of the leaderboard removes the row from the query, not from the response.** There is no
+   payload containing a non-participant's standing for a client to be careless with.
+6. **The ranking is computed by PostgreSQL.** `RANK()` over the whole eligible set before `LIMIT`, so a
+   rank is a real position and ties share one. Ranking in JavaScript would mean fetching every user.
+7. **The equipped theme rides on the session profile**, resolved server-side, so a cosmetic applies on
+   the first paint instead of after a second request that flashes the default palette first.
+8. **Uploads for import are held in memory, not written to disk.** An imported file is read once and
+   has no further use; writing it down would leave a copy of somebody's bank statement on the server
+   with nothing responsible for deleting it.
+9. **Normalisation coerces, and refuses to guess.** `"$1,234.50"`, `"(45.00)"`, and a lower-case
+   category are the same value written differently. A missing title is not repaired and an ambiguous
+   `DD/MM` vs `MM/DD` date is left alone — guessing would file a January expense in October, and a
+   visible error beats a wrong date nobody notices.
+
+**What I verified:** a 71-check script against a running server, all passing, plus the Phase 6 suite
+re-run for regressions (66/66) and the 24 unit tests.
+
+| Area | Checks that passed |
+| --- | --- |
+| Account management | list, role filter, keyword search; suspension makes an **existing token stop working on the next request** and blocks sign-in; reactivation restores both; a role change takes effect on next sign-in and the old role's access is gone |
+| Governance refusals | an Admin cannot suspend or demote **themselves** (400 each), so the platform still has an Admin afterwards; an unknown role is 400; User and Creator each get **403** on both list and write |
+| Profile | a user cannot set their own `role` or `status` through it (**400**, not silently ignored); display name changes work |
+| Leaderboard | not opted in → **no rank and absent from the standings**; opting in gives a real rank; balances descend; the leaderboard balance equals the points endpoint's; an equipped cosmetic shows on the row; **opting out removes the row from the query** |
+| Cosmetics | a redeemed cosmetic equips and its palette returns; the theme and worn id ride on `/auth/me`; unequip clears it; **a voucher cannot be equipped** (400); **another user's redemption is 404, not 403**; a Creator gets 403 |
+| CSV import | loose headers matched; `$1,234.50` becomes 1234.5; `(45.00)` becomes 45; `YYYY/MM/DD` converted; lower-case category matched; bad rows reported **against their fields**; rows numbered as the file shows them |
+| The two-step guarantee | **PREVIEW WROTE NOTHING** — expense count unchanged after preview; confirm wrote exactly 2; **confirm re-validated and rejected a bad row**; an import **cannot label itself `MANUAL`** (400); the server stamped the source itself; money and dates survived exactly |
+| AI import (disabled path) | options report `ai: false` with no key; the statement route answers **503, not 500** |
+
+**One thing my own test got wrong, worth recording.** The first run reported four failures that were all
+my harness, not the code: it assumed the seed left users opted out of the leaderboard (it opts two in),
+and it identified imported rows by `source` alone — which also matches expenses the seed creates, so
+its cleanup deleted fixture data. I re-seeded and made the test set up the state it asserts against and
+match its own rows by title. A verification script that mutates the fixture it is checking is a bug in
+the check, and it is the kind that quietly makes later runs disagree with earlier ones.
+
+**What is not verified:** the live AI extraction call. No `ANTHROPIC_API_KEY` is configured, so the
+disabled path and the pipeline the extractor feeds are tested, and the model call itself is not.
