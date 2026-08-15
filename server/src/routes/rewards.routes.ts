@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { rewardController } from '../controllers/RewardController';
+import { EquipCosmeticDto } from '../dtos/EquipCosmeticDto';
 import { ListQueryDto } from '../dtos/ListQueryDto';
 import {
   CreateRewardItemDto,
@@ -18,7 +19,7 @@ import { validateBody, validateQuery, validateUuidParam } from '../middlewares/v
  * them means neither has to inspect the caller's role to decide what to return, and the Admin-only filters
  * cannot leak onto the public listing.
  *
- * `/manage` and `/redemptions` precede `/:id` so they are not captured as ids.
+ * `/manage`, `/redemptions`, and `/equipped` precede `/:id` so they are not captured as ids.
  */
 export const rewardRoutes = Router();
 
@@ -34,6 +35,21 @@ rewardRoutes.get(
   authorize(Role.USER),
   validateQuery(ListQueryDto),
   rewardController.listRedemptions,
+);
+
+/**
+ * Wears a cosmetic, or takes one off with `{ "redemptionId": null }`.
+ *
+ * A PUT because it sets one value rather than appending: sending the same body twice leaves the same
+ * state. The service checks the redemption belongs to the caller and is a cosmetic; "at most one
+ * equipped" needs no check, being a single column on the user.
+ */
+rewardRoutes.put(
+  '/equipped',
+  authenticate,
+  authorize(Role.USER),
+  validateBody(EquipCosmeticDto),
+  rewardController.equip,
 );
 
 // ------------------------------------------------------------- Admin inventory

@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express';
+import type { EquipCosmeticDto } from '../dtos/EquipCosmeticDto';
 import type { ListQueryDto } from '../dtos/ListQueryDto';
 import type {
   CreateRewardItemDto,
@@ -54,6 +55,11 @@ export class RewardController {
 
   redeem = async (req: Request, res: Response): Promise<void> => {
     res.status(201).json(await this.rewardService.redeem(getAuth(req), pathId(req)));
+  };
+
+  /** Wears a cosmetic the caller bought, or takes off whatever they are wearing when given null. */
+  equip = async (req: BodyOf<EquipCosmeticDto>, res: Response): Promise<void> => {
+    res.json(await this.rewardService.equip(getAuth(req), req.body.redemptionId));
   };
 
   listRedemptions = async (req: Request, res: Response): Promise<void> => {

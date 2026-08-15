@@ -10,6 +10,7 @@ import type {
 import { PointsReason, PointsReferenceType } from '../entities/PointsLedger';
 import { Redemption } from '../entities/Redemption';
 import { RewardItem, RewardItemType } from '../entities/RewardItem';
+import { User } from '../entities/User';
 import type { CosmeticTheme } from '../entities/RewardItem';
 import type { AuthContext } from '../middlewares/auth.middleware';
 import { ConflictError, NotFoundError, ValidationError } from '../utils/AppError';
@@ -18,6 +19,12 @@ import type { Page } from '../utils/pagination';
 import { escapeLikePattern } from '../utils/sql';
 import type { PointsService } from './PointsService';
 import { pointsService } from './PointsService';
+
+/** What the caller is currently wearing, after an equip or unequip. */
+export interface EquippedCosmetic {
+  redemptionId: string | null;
+  theme: CosmeticTheme | null;
+}
 
 export interface RewardItemSummary {
   id: string;
@@ -250,6 +257,49 @@ export class RewardService {
     }
 
     return toRedemptionSummary(redemption);
+  }
+
+  /**
+   * Wears a cosmetic the caller has bought, or takes off whatever they are wearing.
+   *
+   * One operation for both, because they are the same write with a different value — two endpoints
+   * would have to agree about what "equip nothing" means, and could drift.
+   *
+   * Three things are checked, and none of them can be expressed by the schema across tables: that the
+   * redemption exists, that it belongs to the caller, and that what they bought was a cosmetic rather
+   * than a voucher. A missing redemption and someone else's are the same answer — 404 — because a 403
+   * would confirm that a redemption with that id exists.
+   *
+   * "At most one equipped" needs no check at all: it is a single column on the user, so writing a new
+   * value replaces the old one.
+   */
+  async equip(actor: AuthContext, redemptionId: string | null): Promise<EquippedCosmetic> {
+    if (redemptionId === null) {
+      await this.dataSource.getRepository(User).update(actor.userId, {
+        equippedRedemptionId: null,
+      });
+
+      return { redemptionId: null, theme: null };
+    }
+
+    const redemption = await this.redemptions.findOne({
+      where: { id: redemptionId, userId: actor.userId },
+      relations: { rewardItem: true },
+    });
+
+    if (!redemption) {
+      throw new NotFoundError('No redemption with that id');
+    }
+
+    if (redemption.rewardItem.type !== RewardItemType.COSMETIC) {
+      throw new ValidationError('Only a cosmetic can be equipped');
+    }
+
+    await this.dataSource.getRepository(User).update(actor.userId, {
+      equippedRedemptionId: redemption.id,
+    });
+
+    return { redemptionId: redemption.id, theme: redemption.rewardItem.cosmeticTheme };
   }
 
   // ---------------------------------------------------------------- Internal
