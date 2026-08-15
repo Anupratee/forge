@@ -240,6 +240,11 @@ export class ParticipationService {
    * The specification is explicit that this is scoped to challenges the Creator owns, so another Creator —
    * and an Admin, who has no need for it — is refused. This is the one place participant identity is
    * exposed, and it exposes attendance only: never a user's habits, budgets, or balance.
+   *
+   * **Which refusal matters.** A published challenge is already readable by everyone, so telling a
+   * non-owner they may not see its participants reveals nothing: 403. An unpublished one is hidden —
+   * `ChallengeService.getForActor` answers 404 for it — so a 403 here would confirm a draft exists that
+   * the endpoint beside it deliberately conceals. The two must agree, or the quieter one is pointless.
    */
   async listParticipants(
     actor: AuthContext,
@@ -253,6 +258,13 @@ export class ParticipationService {
     }
 
     if (challenge.createdById !== actor.userId) {
+      const published =
+        challenge.status === ChallengeStatus.APPROVED || challenge.status === ChallengeStatus.ENDED;
+
+      if (!published) {
+        throw new NotFoundError('No challenge with that id');
+      }
+
       throw new ForbiddenError('You can only view participants of your own challenges');
     }
 
