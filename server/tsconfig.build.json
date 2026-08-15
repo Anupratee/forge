@@ -1,8 +1,12 @@
 {
   /* Compilation config. Identical to tsconfig.json except that tests are left out of `dist`.
 
+     `src/tests/` holds the integration harness — the database bootstrap and the fixtures. Those are
+     not `.test.ts` files, so they need naming separately, and they must not ship: they import
+     supertest, and one of them can drop a database.
+
      `npm run typecheck` deliberately uses tsconfig.json instead, so the tests are still type-checked —
      Vitest transpiles without checking types, so this is the only thing that reads them. */
   "extends": "./tsconfig.json",
-  "exclude": ["node_modules", "dist", "src/**/*.test.ts"]
+  "exclude": ["node_modules", "dist", "src/**/*.test.ts", "src/tests/**"]
 }

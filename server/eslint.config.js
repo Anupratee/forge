@@ -4,8 +4,10 @@ const tseslint = require('typescript-eslint');
 const prettier = require('eslint-config-prettier');
 
 module.exports = tseslint.config(
-  // eslint.config.js is excluded from tsconfig.json, so the type-aware rules cannot parse it.
-  { ignores: ['dist/**', 'node_modules/**', 'coverage/**', 'eslint.config.js'] },
+  // Both of these sit outside tsconfig.json's `include`, so the type-aware rules cannot parse them.
+  {
+    ignores: ['dist/**', 'node_modules/**', 'coverage/**', 'eslint.config.js', 'vitest.config.ts'],
+  },
   js.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
   {
