@@ -1,10 +1,16 @@
-import express, { type Express, type Request, type Response } from 'express';
+import express, {
+  type ErrorRequestHandler,
+  type Express,
+  type Request,
+  type Response,
+} from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import { env, isAiImportEnabled, isCacheEnabled } from './config/env';
 import { ensureUploadDirectories, UPLOADS_ROOT, UPLOADS_URL_PREFIX } from './config/uploads';
 import { errorHandler, notFoundHandler } from './middlewares/error.middleware';
 import { apiRouter } from './routes';
+import { NotFoundError } from './utils/AppError';
 
 /**
  * Builds the Express application.
@@ -43,6 +49,23 @@ export function createApp(): Express {
     UPLOADS_URL_PREFIX,
     express.static(UPLOADS_ROOT, { index: false, dotfiles: 'ignore', fallthrough: false }),
   );
+
+  /**
+   * Translates a missing upload into a normal 404.
+   *
+   * `fallthrough: false` is what stops a request for a non-existent file continuing on to the rest of
+   * the application, but it reports the miss by passing on a raw `ENOENT` — which the error handler
+   * cannot recognise, so it becomes a logged 500. A referenced image that is simply gone is a
+   * not-found, not a server fault, and it should neither alarm the logs nor tell the caller otherwise.
+   *
+   * Scoped to this mount and placed directly after it, so the knowledge of how `serve-static` reports a
+   * miss stays next to the middleware that produces it rather than leaking into the shared handler.
+   */
+  app.use(UPLOADS_URL_PREFIX, ((error, req, _res, next) => {
+    const status = (error as { statusCode?: number }).statusCode;
+
+    next(status === 404 ? new NotFoundError(`No uploaded file at ${req.originalUrl}`) : error);
+  }) satisfies ErrorRequestHandler);
 
   // Every feature route lives under /api, which is the prefix the client's dev proxy forwards.
   app.use('/api', apiRouter);
