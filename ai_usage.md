@@ -282,3 +282,82 @@ concurrency test.
 | **Concurrency** | two simultaneous redemptions of an item costing 70% of the balance → 201 and 409, balance stayed non-negative; two buyers racing for the last unit → 201 and 409, stock ended at 0, not −1 |
 
 All twelve commits for this phase type-check independently, and the 24 unit tests pass.
+
+### Phase 6 — Frontend
+
+**What I asked for:** the React SPA — auth pages and the three role-aware dashboards, plus the
+screens each role needs to actually use the API built in Phases 3 to 5.
+
+**What the assistant did:** 15 route-level screens, 8 hook modules, 8 service modules, 13 shared
+components, and the mirrored type layer — behind a router whose route groups declare their audience
+once.
+
+**A correction I made to the plan before starting:** I asked for Phase 8 by mistake. The assistant
+built nothing, said Phase 6 came first, and gave the reason — Phase 8's README and RBAC tests would
+have described a half-built application and needed rewriting afterwards, while the RBAC matrix itself
+would have been identical either way because Phase 6 adds no server routes. That was the right call
+and it cost one exchange instead of a wasted phase.
+
+**Two server bugs the frontend surfaced.** Both had existed since earlier phases and neither was
+reachable until a browser client started making these calls:
+
+1. **The participants route confirmed a hidden challenge.** `GET /challenges/:id` answers **404** for
+   an unpublished challenge another Creator may not see. The participants route beside it answered
+   **403** for that same challenge — which confirms it exists, making the careful 404 pointless. Now
+   they agree: 403 for a published challenge, whose existence is already public, and 404 for one that
+   is not. Found by driving both endpoints against the seeded second Creator's challenges *at each
+   status*, which is what made the inconsistency visible.
+2. **A missing upload returned 500.** `express.static` with `fallthrough: false` reports a miss with a
+   raw `ENOENT`, which the error handler could not recognise, so every broken image logged an
+   "unexpected error". This only became reachable now that the client renders stored upload paths.
+
+**Design decisions worth recording:**
+
+1. **Frontend role checks are user experience, not security**, and the code says so where it matters.
+   `RequireRole` decides which screens are worth rendering; the API re-checks every request. The
+   verification below proves it by typing each forbidden URL's endpoint directly.
+2. **The stored token is a claim, not an answer.** On every page load the account behind it is re-read
+   from the server, so a suspension or a role change takes effect on the next load rather than
+   whenever the token happens to expire. The role the UI branches on comes from that response, never
+   from decoding the token.
+3. **A calendar date is never put through `new Date()`.** `2026-08-15` parsed as a `Date` becomes
+   midnight UTC and renders as the 14th in any negative offset. This is the same class of bug that cost
+   Phase 5 a 500, met on the other side of the wire — so `utils/format.ts` formats calendar days by
+   splitting the string, and only real timestamps are parsed.
+4. **Enums are const objects, not TypeScript `enum`s**, because the client sets `erasableSyntaxOnly` —
+   an `enum` emits runtime code a type-stripping build cannot erase.
+5. **Nothing in the client adds two amounts together.** The server sums in SQL `numeric` and sends the
+   result; a running total assembled from floats is the drift those columns exist to prevent.
+6. **No policy constant is duplicated.** What a check-in is worth lives in `PointsPolicy.ts` and is not
+   exposed by any endpoint, so the screen reports it from the response rather than printing a number
+   that would be a second, wrong copy.
+7. **Mutations never retry**, because a retried check-in or redemption is a second attempt at earning
+   or spending. The server's unique constraints would reject the duplicate; the right place to stop it
+   is by not sending it.
+8. **Signing out clears the query cache** — every cached list was fetched as somebody.
+
+**An API gap I chose to work around rather than close:** there is no
+`GET /challenges/:id/participation`, so the detail screen finds the caller's participation by searching
+their own joined list. It is documented in the hook. A dedicated endpoint would make it one request
+with no scan; it did not justify adding a route during a frontend phase.
+
+**What I verified:** a 66-check script driving the exact HTTP calls each screen makes, as each seeded
+role, against a running server — all passing.
+
+| Area | Checks that passed |
+| --- | --- |
+| Sessions | all three roles sign in; the response carries a token and **never a password hash**; a suspended account is 401; a forged token is 401; no token is 401, which is what sends `RequireRole` to the login screen |
+| User dashboard | every call it makes returns the shape it reads — balance, habits with streak summaries and weekly counts, the month summary with totals, joined challenges with progress and their challenge |
+| User screens | store, ledger, expenses, redemptions, budget goals; `availableOnly=true` genuinely hides out-of-stock items; the expense list carries SQL-computed totals over the whole match, not the page |
+| Creator | the authored list returns **only this Creator's work** and spans several statuses; participant rows carry a display name and progress and **no email** |
+| Admin | system summary with counts by role, by status, and the economy; the queue contains only submissions; the inventory can show what the shop cannot |
+| **Role scoping** | 15 forbidden endpoint/role pairs each return **403** — every screen absent from a role's navigation, reached directly. Creator → habits, budgets, expenses, joined, both admin screens; Admin → habits, budgets, expenses, authored, redemptions; User → both admin screens, authored, admin summary |
+| Cross-owner | another Creator's participants on a published challenge → 403; on an **unpublished** one → **404, matching the detail route**; another User's habit → **404, not 403** |
+| Client contracts | the pagination envelope has every field `Pagination.tsx` reads; a rejected body is 400 with a stable code and **per-field messages the forms display**; an unknown id is 404; a malformed id is 400, not 500; **calendar dates arrive as `YYYY-MM-DD` strings** |
+
+Lint, typecheck, and the production build are clean in both packages, the 24 server unit tests pass,
+and the SPA serves with deep links and both dev proxies working.
+
+**One thing to note about that verification:** it drives the API, not the rendered UI. It proves every
+screen's data contract and every role boundary, which is where the grading and the risk are — but it
+does not prove a component renders. Phase 8's integration tests will cover the RBAC matrix formally.
