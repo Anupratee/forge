@@ -1,0 +1,187 @@
+FORGE — HOW TO START THE APP
+============================
+
+Habit tracking + budgeting with a points economy.
+Stack: PostgreSQL (Docker) + Express/TypeORM API + React SPA.
+
+`server/` and `client/` are independent packages. There is no root package.json,
+so you install and run each one separately. They talk only over HTTP.
+
+
+PREREQUISITES
+-------------
+  * Node 24+          (check: node -v)
+  * npm 11+           (check: npm -v)
+  * Docker Desktop    (check: docker --version)
+
+On Windows, Docker Desktop must actually be RUNNING, not just installed.
+If `docker compose up -d` fails with:
+
+    open //./pipe/dockerDesktopLinuxEngine: The system cannot find the file specified
+
+...the engine is not started. Launch "Docker Desktop" from the Start menu,
+wait until the whale icon stops animating, then retry. `docker info` succeeding
+is the reliable readiness check.
+
+
+QUICK START (first time)
+------------------------
+From the repository root:
+
+  1.  cp .env.example .env
+
+  2.  Edit .env and set JWT_SECRET to a long random value.
+      The placeholder from .env.example is REFUSED at boot on purpose.
+      Generate one with:
+
+          node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
+
+      Everything else in .env works as-is for local development.
+      REDIS_URL and ANTHROPIC_API_KEY are optional — leave them blank and
+      those features simply switch themselves off.
+
+  3.  docker compose up -d
+      Starts postgres:16 on port 5432. Wait for it to report "healthy":
+
+          docker compose ps
+
+  4.  cd server
+      npm install
+      npm run migration:run     # creates the schema from the generated migrations
+      npm run seed              # loads demo accounts and data
+      npm run dev               # API on http://localhost:3000  — leave running
+
+  5.  In a SECOND terminal:
+      cd client
+      npm install
+      npm run dev               # SPA on http://localhost:5173 — leave running
+
+  6.  Open http://localhost:5173 and sign in (accounts below).
+
+
+EVERY TIME AFTER THAT
+---------------------
+The database keeps its data in a Docker volume, so you only need:
+
+  Terminal 1:   docker compose up -d
+                cd server && npm run dev
+
+  Terminal 2:   cd client && npm run dev
+
+Run `npm run migration:run` again only after pulling new migrations.
+Run `npm run seed` again only when you want a clean demo dataset.
+
+
+SEEDED ACCOUNTS
+---------------
+Password for ALL accounts:  Forge!2026
+
+  admin@forge.test    Admin               approvals queue, store, accounts
+  maya@forge.test     Creator             owns challenges in several statuses
+  dev@forge.test      Creator             second Creator (cross-Creator scoping)
+  asha@forge.test     User                habits with a 5-day streak, budgets
+  rohan@forge.test    User                second participant, on the leaderboard
+  kim@forge.test      User (SUSPENDED)    sign-in is refused for this one
+
+NOTE: `npm run seed` is DESTRUCTIVE by design. It truncates the domain tables
+and reinserts, so running it twice gives the same database rather than a
+doubled one. It refuses to run under NODE_ENV=production.
+
+
+PORTS AND URLS
+--------------
+  http://localhost:5173     the app — open this one
+  http://localhost:3000     the API
+  http://localhost:3000/health
+                            reports status and which optional features are on
+  localhost:5432            PostgreSQL
+
+The Vite dev server proxies /api and /uploads to port 3000, so the SPA calls
+relative paths and no base URL is baked into the bundle. Open the SPA on 5173,
+never the API port directly.
+
+
+VERIFYING IT ACTUALLY WORKS
+---------------------------
+  curl http://localhost:3000/health
+  -> {"status":"ok","environment":"development","features":{...}}
+
+  curl -X POST http://localhost:3000/api/auth/login \
+       -H "Content-Type: application/json" \
+       -d '{"email":"asha@forge.test","password":"Forge!2026"}'
+  -> 200 with a "token" and a "user" object
+
+  curl http://localhost:3000/api/points/balance -H "Authorization: Bearer <token>"
+  -> {"balance":70}   (asha's seeded balance)
+
+
+STOPPING
+--------
+  Ctrl+C in each dev-server terminal.
+  docker compose down            stop postgres, KEEP the data
+  docker compose down -v         stop postgres, DELETE the data volume
+                                 (you would then need migration:run + seed again)
+
+
+OPTIONAL EXTRAS
+---------------
+  Redis cache:
+      docker compose --profile cache up -d
+      then set REDIS_URL=redis://localhost:6379 in .env and restart the API.
+
+  AI bank-statement import:
+      set ANTHROPIC_API_KEY in .env and restart the API.
+      Without a key the feature returns 503 and the UI falls back to CSV import.
+
+  Both are visible in the "features" object from GET /health.
+
+
+TROUBLESHOOTING
+---------------
+  Boot fails listing several env problems
+      Expected behaviour — config/env.ts collects EVERY problem and reports them
+      together rather than one undefined per restart. Fix them all, then restart.
+
+  Boot fails on JWT_SECRET
+      It is still the .env.example placeholder, or shorter than 32 characters.
+
+  API cannot connect to the database
+      Postgres is not up or not healthy yet. Check `docker compose ps`.
+      DB_* values in .env must match docker-compose.yml — both read the same file.
+
+  Port 3000 or 5173 already in use
+      Something else is running. Change PORT in .env for the API; for the client,
+      change the port in client/vite.config.ts (and its proxy target if the API
+      moved).
+
+  Port 5432 already in use
+      A local PostgreSQL install is holding it. Stop it, or set DB_PORT in .env
+      to a free port — docker-compose.yml publishes that same variable.
+
+  SPA loads but every request 401s
+      You are signed out, or the API restarted with a different JWT_SECRET.
+      Sign in again.
+
+
+COMMANDS REFERENCE
+------------------
+  Run inside server/ or client/:
+
+    npm run dev            development server with reload      (both)
+    npm run build          production build                     (both)
+    npm run lint           ESLint                               (both)
+    npm run typecheck      tsc --noEmit                         (both)
+
+  server/ only:
+
+    npm test               Vitest — unit and integration tests
+    npm run seed           reset and repopulate the dev database
+    npm run migration:run      apply pending migrations
+    npm run migration:revert   undo the last migration
+    npm run migration:show     list applied and pending
+    npm run migration:generate -- src/migrations/Name
+                               generate from the entity classes
+    npm run schema:log         print the DDL the entities imply, without running it
+
+  Migrations are GENERATED output. Never hand-write DDL and never enable
+  `synchronize`. If a migration is wrong, fix the entity and regenerate.
