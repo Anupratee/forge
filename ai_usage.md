@@ -548,3 +548,8 @@ and `migration:generate` reporting **"No changes in database schema were found"*
 **What is not covered.** The client has no test suite; its type-check and build are what gate it, and
 CI runs both. The live AI extraction call remains unverified for want of an API key. Neither is a
 regression from a previous phase — both are stated so they are not mistaken for coverage.
+
+## Viva preparation PDF - 2026-09-08
+
+Compiled the two viva question banks from this conversation into a searchable PDF with contents, bookmarks, 250 numbered questions and answers, rapid follow-ups, and a demonstration checklist. Preserved the implementation limitations discussed in the answers. Checked all question headings against extracted PDF text and rendered pages for visual review. No application code changes, builds, tests, or database operations were performed.
+
